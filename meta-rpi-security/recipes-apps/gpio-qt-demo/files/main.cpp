@@ -456,7 +456,9 @@ public:
 
         QString gearText = (d.gear == 0) ? "N" : QString::number(d.gear);
         drawText(p, gearText, 270, 43, 45, 24, 17, true, QColor(70, 255, 80));
-        drawText(p, d.driveMode, 270, 70, 45, 18, 8, true, QColor(70, 255, 100));
+        static const char *kDriveModes[] = { "ECO", "NORMAL", "SPORT" };
+        const char *modeText = (d.driveMode >= 0 && d.driveMode <= 2) ? kDriveModes[d.driveMode] : "---";
+        drawText(p, modeText, 270, 70, 45, 18, 8, true, QColor(70, 255, 100));
 
         drawText(p, "TRIP A", 4, 156, 76, 11, 6, true, QColor(110, 190, 230));
         drawText(p, QString::number(d.tripA, 'f', 1) + " km", 4, 166, 76, 16, 8, true);

@@ -7,7 +7,7 @@
 set -Eeuo pipefail
 
 # Configuration
-IMAGE_PREFIX="rpi-secure-qt-image-raspberrypi0.rootfs"
+IMAGE_PREFIX="rpi-secure-qt-image-raspberrypi0"
 TARGET_MACHINE="raspberrypi0"
 
 # Auto-detect image directory (checks standard Yocto deploy path or current dir)
@@ -19,7 +19,7 @@ else
 fi
 
 # Ensure required system utilities exist
-REQUIRED_CMDS=(lsblk findmnt bzcat dd sudo wipefs blockdev)
+REQUIRED_CMDS=(lsblk findmnt dd sudo wipefs blockdev)
 for cmd in "${REQUIRED_CMDS[@]}"; do
     command -v "$cmd" >/dev/null 2>&1 || { echo "ERROR: Required command missing: $cmd"; exit 1; }
 done
@@ -35,11 +35,11 @@ echo
 
 # Locate WIC image files (including symlinks, newest first)
 mapfile -t IMAGES < <(find -L "$IMAGE_DIR" -maxdepth 1 -type f \
-    \( -name "${IMAGE_PREFIX}.wic.bz2" -o -name "${IMAGE_PREFIX}-*.wic.bz2" \) \
+    \( -name "${IMAGE_PREFIX}*.wic.bz2" -o -name "${IMAGE_PREFIX}*.wic.gz" -o -name "${IMAGE_PREFIX}*.wic.zst" -o -name "${IMAGE_PREFIX}*.wic.xz" -o -name "${IMAGE_PREFIX}*.wic" \) \
     -printf '%T@ %p\n' 2>/dev/null | sort -nr | cut -d' ' -f2-)
 
 if ((${#IMAGES[@]} == 0)); then
-    echo "ERROR: No matching '${IMAGE_PREFIX}*.wic.bz2' images found in $IMAGE_DIR."
+    echo "ERROR: No matching '${IMAGE_PREFIX}*.wic*' images found in $IMAGE_DIR."
     exit 1
 fi
 
@@ -147,11 +147,21 @@ sync
 $SUDO partprobe "$TARGET" 2>/dev/null || true
 
 # Flashing Step
-echo "[4/4] Decompressing and writing image to $TARGET..."
+case "$IMAGE" in
+    *.bz2) DECOMPRESS_CMD="bzcat" ;;
+    *.gz)  DECOMPRESS_CMD="zcat" ;;
+    *.zst) DECOMPRESS_CMD="zstdcat" ;;
+    *.xz)  DECOMPRESS_CMD="xzcat" ;;
+    *)     DECOMPRESS_CMD="cat" ;;
+esac
+
+command -v "$DECOMPRESS_CMD" >/dev/null 2>&1 || { echo "ERROR: Decompressor '$DECOMPRESS_CMD' not found in PATH."; exit 1; }
+
+echo "[4/4] Decompressing and writing image ($DECOMPRESS_CMD) to $TARGET..."
 if command -v pv >/dev/null 2>&1; then
-    bzcat "$IMAGE" | pv | $SUDO dd of="$TARGET" bs=4M conv=fsync status=none
+    "$DECOMPRESS_CMD" "$IMAGE" | pv | $SUDO dd of="$TARGET" bs=4M conv=fsync status=none
 else
-    bzcat "$IMAGE" | $SUDO dd of="$TARGET" bs=4M iflag=fullblock conv=fsync status=progress
+    "$DECOMPRESS_CMD" "$IMAGE" | $SUDO dd of="$TARGET" bs=4M iflag=fullblock conv=fsync status=progress
 fi
 
 sync
